@@ -30,6 +30,11 @@ LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
+//
+const static char CHAR_LEFT     = 127;
+const static char CHAR_RIGHT    = 126;
+const static char CHAR_DOT      = -91;
+
 void setup()
 {
     lcd.begin(LCD_COLS, LCD_ROWS);
@@ -46,18 +51,43 @@ void setup()
 }
 
 char displayBuffer[17] = "";
-char varBuffer[8];
+char varBuffer[6];
+
+struct ButtonControl
+{
+    unsigned long firstTime = 0;
+    long secs_held;
+    long prev_secs_held;
+    boolean current;
+    boolean previous = true;
+} LCDButton;
+
+int setTemp = 32;
+boolean isTempSet = false;
+
+float nowTemp = 0.0f;
 
 void loop()
 {
-    lcd.setCursor(0, 0);
-    lcd.print("Current Temp:");
-    lcd.setCursor(0, 1);
-    tempSensor.requestTemperatures();
-    float temp = tempSensor.getTempCByIndex(0);
-    dtostrf(temp, 7, 2, varBuffer);
-    sprintf(displayBuffer, "%s C", varBuffer);
-    lcd.print(displayBuffer);
+    if (!isTempSet)
+    {
+        sprintf(displayBuffer, "Set to:%-5d C ", setTemp);
+        lcd.setCursor(0, 0);
+        printLCDBuffer();
+        controlValue(&setTemp, &isTempSet);
+    }
+    if (isTempSet)
+    {
+        sprintf(displayBuffer, "Set at:%-5d C ", setTemp);
+        lcd.setCursor(0, 0);
+        printLCDBuffer();
+        tempSensor.requestTemperatures();
+        nowTemp = tempSensor.getTempCByIndex(0);
+        dtostrf(nowTemp, -5, 1, varBuffer);
+        sprintf(displayBuffer, "Now is:%s C ", varBuffer);
+        lcd.setCursor(0, 1);
+        printLCDBuffer();
+    }
 }
 
 int readLCDButton()
@@ -68,7 +98,7 @@ int readLCDButton()
     if (key < 50)   return LCD_BTN_RIGHT;
     if (key < 150)  return LCD_BTN_UP;
     if (key < 300)  return LCD_BTN_DOWN;
-    if (key < 500)  return LCD_BTN_LEFT;
+    if (key < 500)  return LCD_BTN_LEFT; 
     if (key < 750)  return LCD_BTN_SELECT;
 
     return -1;
@@ -110,3 +140,53 @@ void printLCDButton(int key)
         }
     }
 }
+
+void printLCDBuffer()
+{
+    lcd.print(displayBuffer);
+}
+
+void modValue(int *ptr)
+{
+    if (readLCDButton() == LCD_BTN_LEFT)
+    {
+        (*ptr)--;
+    }
+    if (readLCDButton() == LCD_BTN_RIGHT)
+    {
+        (*ptr)++;
+    }
+}
+
+void modBoolean(boolean *ptr)
+{
+    if (readLCDButton() == LCD_BTN_SELECT)
+    {
+        *ptr = !(*ptr);
+    }
+}
+
+void controlValue(int *value, boolean *isSet)
+{
+    LCDButton.current = (readLCDButton() == LCD_BTN_NONE);
+    if (LCDButton.current == false && LCDButton.previous == true && (millis() - LCDButton.firstTime) > 50)
+    {
+        LCDButton.firstTime = millis();
+        modValue(value);
+        modBoolean(isSet);
+    }
+
+    LCDButton.secs_held = (millis() - LCDButton.firstTime) / 1000;
+
+    if (LCDButton.current == false && LCDButton.secs_held > LCDButton.prev_secs_held)
+    {
+        modValue(value);
+        modBoolean(isSet);
+    }
+
+    LCDButton.previous = LCDButton.current;
+    LCDButton.prev_secs_held = LCDButton.secs_held;
+}
+
+
+
