@@ -30,10 +30,11 @@ LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
-//
-const static char CHAR_LEFT     = 127;
-const static char CHAR_RIGHT    = 126;
-const static char CHAR_DOT      = -91;
+//add for later
+const static char ch_Left     = 127;
+const static char ch_Right    = 126;
+const static char ch_Dot      = -91;
+const static char ch_Degree   = -33;
 
 void setup()
 {
@@ -71,20 +72,20 @@ void loop()
 {
     if (!isTempSet)
     {
-        sprintf(displayBuffer, "Set to:%-5d C ", setTemp);
+        sprintf(displayBuffer, "Set to:%-5d%cC ", setTemp, ch_Degree);
         lcd.setCursor(0, 0);
         printLCDBuffer();
         controlValue(&setTemp, &isTempSet);
     }
     if (isTempSet)
     {
-        sprintf(displayBuffer, "Set at:%-5d C ", setTemp);
+        sprintf(displayBuffer, "Set at:%-5d%cC ", setTemp, ch_Degree);
         lcd.setCursor(0, 0);
         printLCDBuffer();
         tempSensor.requestTemperatures();
         nowTemp = tempSensor.getTempCByIndex(0);
         dtostrf(nowTemp, -5, 1, varBuffer);
-        sprintf(displayBuffer, "Now is:%s C ", varBuffer);
+        sprintf(displayBuffer, "Now is:%s%cC ", varBuffer, ch_Degree);
         lcd.setCursor(0, 1);
         printLCDBuffer();
     }
