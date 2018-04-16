@@ -31,6 +31,7 @@ OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
 #define LED_LIGHT   50
+#define tonePin     48
 
 //add for later
 const static char ch_Left     = 127;
@@ -38,6 +39,9 @@ const static char ch_Right    = 126;
 const static char ch_Dot      = -91;
 const static char ch_Degree   = -33;
 const static char ch_Block    = -1;
+
+//for debug
+#define debugButton false
 
 void setup()
 {
@@ -64,50 +68,31 @@ char varBuffer[6];
 struct ButtonControl
 {
     unsigned long firstTime = 0;
-    long secs_held;
-    long prev_secs_held;
+    int secs_held;
+    int prev_secs_held;
     boolean current;
     boolean previous = true;
 } LCDButton;
 
-int setTemp = 32;
-boolean isTempSet = false;
-boolean isAlarmSet = false;
+int setTemp     = 32;
+float nowTemp   = 0.0f;
 
-float nowTemp = 0.0f;
+boolean isTempSet   = false;
+boolean isAlarmSet  = false;
+boolean isPlayTone  = false;
 
 void loop()
 {
     if (!isTempSet)
     {
-        sprintf(displayBuffer, "Set to:%-5d%cC ", setTemp, ch_Degree);
-        lcd.setCursor(0, 0);
-        printLCDBuffer();
         digitalWrite(LED_LIGHT, LOW);
-        controlValue(&setTemp, &isTempSet);
+        menuSetTemp();
         return;
     }
+
     if (isTempSet)
     {
-        if (controlCancel())
-        {
-           return;
-        }
-        if (nowTemp >= setTemp || isAlarmSet)
-        {
-            isAlarmSet = true;
-            digitalWrite(LED_LIGHT, HIGH);
-            alarmTemp(0);
-            return;
-        }
-        else
-        {
-            digitalWrite(LED_LIGHT, LOW);
-        }
-        sprintf(displayBuffer, "Set at:%-5d%cC  ", setTemp, ch_Degree);
-        lcd.setCursor(0, 0);
-        printLCDBuffer();
-        printLCDTempCByIndex(0);
+        menuCheckReadTemp();
     }
 }
 
@@ -125,6 +110,7 @@ byte readLCDButton()
     return -1;
 }
 
+#if (debugButton)
 void printLCDButton(byte key)
 {
     switch (key)
@@ -161,13 +147,31 @@ void printLCDButton(byte key)
         }
     }
 }
+#endif
 
 void printLCDTempCByIndex(int index)
 {
     nowTemp = getTempCByIndex(index);
     dtostrf(nowTemp, -5, 1, varBuffer);
-    sprintf(displayBuffer, "Now is:%s%cC  ", varBuffer, ch_Degree);
     lcd.setCursor(0, 1);
+    printLCDTemp("Now is:", varBuffer);
+}
+
+void printLCDHead(char *str)
+{
+    lcd.setCursor(0, 0);
+    lcd.print(str);
+}
+
+void printLCDTemp(char *str, int var)
+{
+    sprintf(displayBuffer, "%s%-5d%cC  " , str, var, ch_Degree);
+    printLCDBuffer();
+}
+
+void printLCDTemp(char *str0, char *str1)
+{
+    sprintf(displayBuffer, "%s%s%cC  " , str0, str1, ch_Degree);
     printLCDBuffer();
 }
 
@@ -217,30 +221,30 @@ void controlValue(int *value, boolean *isSet)
     LCDButton.prev_secs_held = LCDButton.secs_held;
 }
 
-boolean controlCancel()
+boolean controlCancel(int holdSecs)
 {
     LCDButton.current = (readLCDButton() == LCD_BTN_NONE);
     if (LCDButton.current == false && LCDButton.previous == true && (millis() - LCDButton.firstTime) > 50)
     {
         LCDButton.firstTime = millis();
         lcd.clear();
-        lcd.print("Hold to cancel..");
+        printLCDHead("Hold to cancel..");
     }
 
     LCDButton.secs_held = (millis() - LCDButton.firstTime) / 1000;
-    Serial.println(LCDButton.secs_held);
 
     if (LCDButton.current == false && LCDButton.secs_held > LCDButton.prev_secs_held)
     {
         if (readLCDButton() == LCD_BTN_SELECT)
         {
-            lcd.setCursor((LCDButton.secs_held - 1) * 2, 1);
-            lcd.print(ch_Block);
-            lcd.print(ch_Block);
+            lcd.setCursor(1, 1);
+            sprintf(displayBuffer, "%2d/%2d Secs", LCDButton.secs_held, holdSecs);
+            printLCDBuffer();
         }
-        if (LCDButton.secs_held * 2 >= 16)
+        if (LCDButton.secs_held >= holdSecs)
         {
             lcd.clear();
+            noTone(tonePin);
             isTempSet = false;
             isAlarmSet = false;
         }
@@ -251,12 +255,58 @@ boolean controlCancel()
     return !LCDButton.current;
 }
 
-void alarmTemp(int index)
+void menuSetTemp()
 {
     lcd.setCursor(0, 0);
-    lcd.print("Set Alarm Out...");
+    printLCDTemp("Set to:", setTemp);
+    controlValue(&setTemp, &isTempSet);
+}
+
+void menuCheckReadTemp()
+{
+    if (!isAlarmSet)
+    {
+        if (controlCancel(10))
+        {
+            return;
+        }
+    }
+    
+    if (nowTemp >= setTemp || isAlarmSet)
+    {
+        isAlarmSet = true;
+        digitalWrite(LED_LIGHT, HIGH);
+        alarmTemp(0);
+        return;
+    }
+    else
+    {
+        digitalWrite(LED_LIGHT, LOW);
+    }
+
+    lcd.setCursor(0, 0);
+    printLCDTemp("Set to:", setTemp);
+    printLCDTempCByIndex(0);
+}
+
+void alarmTemp(int index)
+{
+    if (controlCancel(3))
+    {
+        return;
+    }
+    printLCDHead("Set Alarm Out...");
     printLCDTempCByIndex(index);
-    controlCancel();
+    if (!isPlayTone)
+    {
+        playTone();
+    }
+}
+
+void playTone()
+{
+    isPlayTone = true;
+    tone(tonePin, 1000);
 }
 
 float getTempCByIndex(int index)
