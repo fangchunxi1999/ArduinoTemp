@@ -18,6 +18,7 @@ LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
 //for Button value
 #define LCD_BUTTON      A0
+
 #define LCD_BTN_NONE    0
 #define LCD_BTN_SELECT  1
 #define LCD_BTN_UP      2
@@ -40,14 +41,16 @@ const static char ch_Dot      = -91;
 const static char ch_Degree   = -33;
 const static char ch_Block    = -1;
 
+#define maxMode 2
+
 //for debug
 #define debugButton false
+#define debugSerialPrint false
 
 void setup()
 {
     lcd.begin(LCD_COLS, LCD_ROWS);
-    lcd.setCursor(0, 0);
-    lcd.print("Hello, World!");
+    printDisplayln("Hello World!!", 0);
 
     tempSensor.begin();
     tempSensor.setResolution(12);
@@ -55,7 +58,9 @@ void setup()
     pinMode(LED_LIGHT, OUTPUT);
     digitalWrite(LED_LIGHT, HIGH);
 
+    #if (debugSerialPrint)
     Serial.begin(115200);
+    #endif
 
     delay(1000);
     digitalWrite(LED_LIGHT, LOW);
@@ -72,46 +77,47 @@ struct ButtonControl
     int prev_secs_held;
     boolean current;
     boolean previous = true;
-} LCDButton;
+} buttonValue;
+
+int mode   = 0;
 
 int setTemp     = 32;
 float nowTemp   = 0.0f;
 
 boolean isTempSet   = false;
+boolean isModeSet   = false;
 boolean isAlarmSet  = false;
 boolean isPlayTone  = false;
 
 void loop()
 {
+    if (!isModeSet)
+    {
+        menuSetMode();
+        return;
+    }
+    else
+    {
+        switch (mode % 2)
+        {
+            case 1: menuGetTemp();      return;
+        }
+    }
+
     if (!isTempSet)
     {
-        digitalWrite(LED_LIGHT, LOW);
         menuSetTemp();
         return;
     }
-
     if (isTempSet)
     {
-        menuCheckReadTemp();
+        menuCheckGetTemp();
     }
 }
 
-byte readLCDButton()
-{
-    int key = analogRead(LCD_BUTTON);
-    if (key > 1000) return LCD_BTN_NONE;
-
-    if (key < 50)   return LCD_BTN_RIGHT;
-    if (key < 150)  return LCD_BTN_UP;
-    if (key < 300)  return LCD_BTN_DOWN;
-    if (key < 500)  return LCD_BTN_LEFT; 
-    if (key < 750)  return LCD_BTN_SELECT;
-
-    return -1;
-}
-
+//debug function
 #if (debugButton)
-void printLCDButton(byte key)
+void printbuttonValue(byte key)
 {
     switch (key)
     {
@@ -149,120 +155,169 @@ void printLCDButton(byte key)
 }
 #endif
 
-void printLCDTempCByIndex(int index)
+//debug function
+
+
+//LCD Display function
+void printDisplayTempCByIndex(int index)
 {
     nowTemp = getTempCByIndex(index);
     dtostrf(nowTemp, -5, 1, varBuffer);
-    lcd.setCursor(0, 1);
-    printLCDTemp("Now is:", varBuffer);
+    printDisplayTemp("Now is:", varBuffer, 1);
 }
 
-void printLCDHead(char *str)
+void printDisplayHead(char *str)
 {
-    lcd.setCursor(0, 0);
-    lcd.print(str);
+    printDisplayln(str, 0);
 }
 
-void printLCDTemp(char *str, int var)
+void printDisplayln(char *str, byte row)
+{
+    sprintf(displayBuffer, "%s", str);
+    printDisplayBuffer(row);
+}
+
+void printDisplayTemp(char *str, int var, byte row)
 {
     sprintf(displayBuffer, "%s%-5d%cC  " , str, var, ch_Degree);
-    printLCDBuffer();
+    printDisplayBuffer(row);
 }
 
-void printLCDTemp(char *str0, char *str1)
+void printDisplayTemp(char *str0, char *str1, byte row)
 {
     sprintf(displayBuffer, "%s%s%cC  " , str0, str1, ch_Degree);
-    printLCDBuffer();
+    printDisplayBuffer(row);
 }
 
-void printLCDBuffer()
+void printDisplayBuffer(byte row)
 {
+    lcd.setCursor(0, row);
     lcd.print(displayBuffer);
 }
+//LCD Display function
 
-void modValue(int *ptr, int var)
+
+//Value function
+
+
+//condition control
+void controlValue(int *value, boolean *isSet, int modClick, int modHold)
 {
-    if (readLCDButton() == LCD_BTN_LEFT)
+    byte button = getButton();
+    buttonValue.current = (button == LCD_BTN_NONE);
+    if (buttonValue.current == false && buttonValue.previous == true && (millis() - buttonValue.firstTime) > 50)
     {
-        (*ptr) -= var;
-    }
-    if (readLCDButton() == LCD_BTN_RIGHT)
-    {
-        (*ptr) += var;
-    }
-}
-
-void modBoolean(boolean *ptr)
-{
-    if (readLCDButton() == LCD_BTN_SELECT)
-    {
-        *ptr = !(*ptr);
-    }
-}
-
-void controlValue(int *value, boolean *isSet)
-{
-    LCDButton.current = (readLCDButton() == LCD_BTN_NONE);
-    if (LCDButton.current == false && LCDButton.previous == true && (millis() - LCDButton.firstTime) > 50)
-    {
-        LCDButton.firstTime = millis();
-        modValue(value, 1);
-        modBoolean(isSet);
+        buttonValue.firstTime = millis();
+        #if (debugButton)
+        lcd.setCursor(0, 1);
+        printbuttonValue(button);
+        #endif
+        switch (button)
+        {
+            case LCD_BTN_LEFT:  (*value) -= modClick; break;
+            case LCD_BTN_RIGHT: (*value) += modClick; break;
+            case LCD_BTN_SELECT: *isSet = !(*isSet); break;
+        }
     }
 
-    LCDButton.secs_held = (millis() - LCDButton.firstTime) / 1000;
+    buttonValue.secs_held = (millis() - buttonValue.firstTime) / 1000;
 
-    if (LCDButton.current == false && LCDButton.secs_held > LCDButton.prev_secs_held)
+    if (buttonValue.current == false && buttonValue.secs_held > buttonValue.prev_secs_held)
     {
-        modValue(value, 5);
+        switch (button)
+        {
+            case LCD_BTN_LEFT:  (*value) -= modHold; break;
+            case LCD_BTN_RIGHT: (*value) += modHold; break;
+        }
     }
 
-    LCDButton.previous = LCDButton.current;
-    LCDButton.prev_secs_held = LCDButton.secs_held;
+    buttonValue.previous = buttonValue.current;
+    buttonValue.prev_secs_held = buttonValue.secs_held;
 }
 
 boolean controlCancel(int holdSecs)
 {
-    LCDButton.current = (readLCDButton() == LCD_BTN_NONE);
-    if (LCDButton.current == false && LCDButton.previous == true && (millis() - LCDButton.firstTime) > 50)
+    byte button = getButton();
+    buttonValue.current = (button == LCD_BTN_NONE);
+    if (buttonValue.current == false && buttonValue.previous == true && (millis() - buttonValue.firstTime) > 50)
     {
-        LCDButton.firstTime = millis();
-        lcd.clear();
-        printLCDHead("Hold to cancel..");
+        buttonValue.firstTime = millis();
+        if (button == LCD_BTN_SELECT)
+        {
+            lcd.clear();
+            printDisplayHead("Hold to cancel..");
+        }
     }
 
-    LCDButton.secs_held = (millis() - LCDButton.firstTime) / 1000;
+    buttonValue.secs_held = (millis() - buttonValue.firstTime) / 1000;
 
-    if (LCDButton.current == false && LCDButton.secs_held > LCDButton.prev_secs_held)
+    if (buttonValue.current == false && buttonValue.secs_held > buttonValue.prev_secs_held)
     {
-        if (readLCDButton() == LCD_BTN_SELECT)
+        if (button == LCD_BTN_SELECT)
         {
-            lcd.setCursor(1, 1);
-            sprintf(displayBuffer, "%2d/%2d Secs", LCDButton.secs_held, holdSecs);
-            printLCDBuffer();
+            sprintf(displayBuffer, "%3d/%2d Secs", buttonValue.secs_held, holdSecs);
+            printDisplayBuffer(1);
         }
-        if (LCDButton.secs_held >= holdSecs)
+        if (buttonValue.secs_held >= holdSecs)
         {
             lcd.clear();
             noTone(tonePin);
+            digitalWrite(LED_LIGHT, LOW);
+            isModeSet = false;
             isTempSet = false;
             isAlarmSet = false;
         }
     }
 
-    LCDButton.previous = LCDButton.current;
-    LCDButton.prev_secs_held = LCDButton.secs_held;
-    return !LCDButton.current;
+    buttonValue.previous = buttonValue.current;
+    buttonValue.prev_secs_held = buttonValue.secs_held;
+    return !buttonValue.current;
+}
+//condition control
+
+
+//UI (WIP)
+void menuSetMode()
+{
+    controlValue(&mode, &isModeSet, 1, 1);
+    int i = mode % maxMode;
+    sprintf(displayBuffer, "Set Mode:%2d", i + 1);
+    printDisplayBuffer(0);
+    switch (i)
+    {
+        case 0:
+            printDisplayln("Alarm Temp", 1);
+            mode = 0;
+            break;
+        case 1:
+            printDisplayln("Read Only ", 1);
+            mode = 1;
+            break;
+
+        default:
+            printDisplayln("Err", 1);
+            mode = maxMode;
+            break;
+    }
 }
 
 void menuSetTemp()
 {
-    lcd.setCursor(0, 0);
-    printLCDTemp("Set to:", setTemp);
-    controlValue(&setTemp, &isTempSet);
+    printDisplayTemp("Set to:", setTemp, 0);
+    controlValue(&setTemp, &isTempSet, 1, 5);
 }
 
-void menuCheckReadTemp()
+void menuGetTemp()
+{
+    if (controlCancel(10))
+    {
+        return;
+    }
+    printDisplayHead("Display current");
+    printDisplayTempCByIndex(0);
+}
+
+void menuCheckGetTemp()
 {
     if (!isAlarmSet)
     {
@@ -275,38 +330,53 @@ void menuCheckReadTemp()
     if (nowTemp >= setTemp || isAlarmSet)
     {
         isAlarmSet = true;
-        digitalWrite(LED_LIGHT, HIGH);
-        alarmTemp(0);
+        menuTempAlarm(0);
         return;
     }
-    else
-    {
-        digitalWrite(LED_LIGHT, LOW);
-    }
 
-    lcd.setCursor(0, 0);
-    printLCDTemp("Set to:", setTemp);
-    printLCDTempCByIndex(0);
+    printDisplayTemp("Set to:", setTemp, 0);
+    printDisplayTempCByIndex(0);
 }
 
-void alarmTemp(int index)
+void menuTempAlarm(int index)
 {
     if (controlCancel(3))
     {
         return;
     }
-    printLCDHead("Set Alarm Out...");
-    printLCDTempCByIndex(index);
+    digitalWrite(LED_LIGHT, HIGH);
+    printDisplayHead("Set Alarm Out...");
+    printDisplayTempCByIndex(index);
     if (!isPlayTone)
     {
         playTone();
     }
 }
+//UI
 
+
+//Alarm play (WIP)
 void playTone()
 {
     isPlayTone = true;
     tone(tonePin, 1000);
+}
+//Alarm play (WIP)
+
+
+//misc
+byte getButton()
+{
+    int key = analogRead(LCD_BUTTON);
+    if (key > 1000) return LCD_BTN_NONE;
+
+    if (key < 50)   return LCD_BTN_RIGHT;
+    if (key < 150)  return LCD_BTN_UP;
+    if (key < 300)  return LCD_BTN_DOWN;
+    if (key < 500)  return LCD_BTN_LEFT; 
+    if (key < 750)  return LCD_BTN_SELECT;
+
+    return -1;
 }
 
 float getTempCByIndex(int index)
@@ -314,3 +384,4 @@ float getTempCByIndex(int index)
     tempSensor.requestTemperatures();
     return tempSensor.getTempCByIndex(index);
 }
+//misc
