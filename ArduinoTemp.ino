@@ -34,7 +34,7 @@ LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #define CON_VAR_RIGHT   50
 
 //for Digital Temperature Prob
-#define TEMP_READ   A8
+#define TEMP_READ   A7
 OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
@@ -57,7 +57,7 @@ const static char ch_Block    = -1;
 void setup()
 {
     lcd.begin(LCD_COLS, LCD_ROWS);
-    printDisplayln("Hello World!!", 0);
+    printDisplayln("Welcome!!", 0);
 
     pinMode(LED_LIGHT, OUTPUT);
     digitalWrite(LED_LIGHT, HIGH);
@@ -77,7 +77,7 @@ void setup()
     lcd.clear();
 }
 
-char displayBuffer[17] = "";
+char displayBuffer[LCD_COLS + 1] = "";
 char varBuffer[6];
 
 struct ButtonControl
@@ -94,14 +94,34 @@ int mode   = 0;
 int setTemp     = 32;
 float nowTemp   = 0.0f;
 
+char greater = '>';
+
 boolean isTempSet   = false;
 boolean isModeSet   = false;
 boolean isAlarmSet  = false;
 boolean isPlayTone  = false;
-boolean isCheckGreater = true;
+boolean requestClear = false;
+boolean isUseF      = false;
+int isCheckGreater = 1;
+
+#if (debugSerialPrint)
+unsigned long timeDebug = 0;
+#endif
 
 void loop()
 {
+    #if (debugSerialPrint)
+    Serial.print("Loop time:");
+    Serial.println(millis() - timeDebug);
+    timeDebug = millis();
+    #endif
+
+    if (requestClear)
+    {
+        requestClear = false;
+        //lcd.clear();
+    }
+
     if (!isModeSet)
     {
         menuSetMode();
@@ -111,18 +131,17 @@ void loop()
     {
         switch (mode % 2)
         {
+            case 0: 
+                if (!isTempSet)
+                {
+                    menuSetTemp();
+                    return;
+                }
+                menuCheckGetTemp();
+                return;
+            
             case 1: menuGetTemp();      return;
         }
-    }
-
-    if (!isTempSet)
-    {
-        menuSetTemp();
-        return;
-    }
-    if (isTempSet)
-    {
-        menuCheckGetTemp();
     }
 }
 
@@ -170,9 +189,9 @@ void printbuttonValue(byte key)
 
 
 //LCD Display function
-void printDisplayTempCByIndex(int index)
+void printDisplayTempByIndex(int index)
 {
-    nowTemp = getTempCByIndex(index);
+    nowTemp = getTempByIndex(index);
     dtostrf(nowTemp, -5, 1, varBuffer);
     printDisplayTemp("Now:", varBuffer, 'C', 1);
 }
@@ -183,22 +202,22 @@ void printDisplayln(char *str, byte row)
     printDisplayBuffer(row);
 }
 
-void printDisplayTemp(char *str, int var,char symbol, byte row)
-{
-    sprintf(displayBuffer, "%s%-5d%c%c  " , str, var, ch_Degree, symbol);
-    printDisplayBuffer(row);
-}
 
 void printDisplayTemp(char *str0, char *str1,char symbol, byte row)
 {
-    sprintf(displayBuffer, "%s%s%c%c  " , str0, str1, ch_Degree, symbol);
+    sprintf(displayBuffer, "%s%s%c%c" , str0, str1, ch_Degree, symbol);
     printDisplayBuffer(row);
 }
 
 void printDisplayBuffer(byte row)
 {
     lcd.setCursor(0, row);
-    lcd.print(displayBuffer);
+    char disBuff[LCD_COLS + 1] = "";
+    sprintf(disBuff, "%-16s", displayBuffer);
+    #if (debugSerialPrint)
+    Serial.println(disBuff);
+    #endif
+    lcd.print(disBuff);
 }
 //LCD Display function
 
@@ -253,6 +272,7 @@ void controlValue(int *valueLR, int *valueUD, boolean *isSet, int modClick, int 
             if (button == CON_BTN_SELECT)
             {
                 modValue(isSet);
+                requestClear = true;
             }
         }
     }
@@ -293,7 +313,7 @@ boolean controlCancel(int holdSecs)
         if (button == CON_BTN_SELECT)
         {
             lcd.clear();
-            printDisplayln("Hold to cancel..", 0);
+            printDisplayln("Hold 2 cancel", 0);
         }
     }
 
@@ -339,7 +359,7 @@ void menuSetMode()
             mode = 0;
             break;
         case 1:
-            printDisplayln("Read Only ", 1);
+            printDisplayln("Read Only", 1);
             mode = 1;
             break;
 
@@ -352,39 +372,41 @@ void menuSetMode()
 
 void menuSetTemp()
 {
-    printDisplayTemp("Set:", setTemp, 'C', 0);
-    if (isCheckGreater)
+    //printDisplayTemp("Set:", setTemp, 'C', 0);
+    if (isCheckGreater % 2)
     {
-        printDisplayln("Mode: >", 1);
+        greater = '>';
     }
     else
     {
-        printDisplayln("Mode: <", 1);
+        greater = '<';
     }  
-    controlValue(&setTemp, NULL, &isTempSet, 1, 5);
+    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, 'C');
+    printDisplayBuffer(0);
+    controlValue(&setTemp, &isCheckGreater, &isTempSet, 1, 5);
 }
 
 void menuGetTemp()
 {
-    if (controlCancel(10))
+    if (controlCancel(5))
     {
         return;
     }
     printDisplayln("Temperature", 0);
-    printDisplayTempCByIndex(0);
+    printDisplayTempByIndex(0);
 }
 
 void menuCheckGetTemp()
 {
     if (!isAlarmSet)
     {
-        if (controlCancel(10))
+        if (controlCancel(5))
         {
             return;
         }
     }
     
-    if (isCheckGreater)
+    if (isCheckGreater % 2)
     {
         if (nowTemp >= setTemp || isAlarmSet)
         {
@@ -403,8 +425,9 @@ void menuCheckGetTemp()
         }
     }
 
-    printDisplayTemp("Set:", setTemp, 'C', 0);
-    printDisplayTempCByIndex(0);
+    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, 'C');
+    printDisplayBuffer(0);
+    printDisplayTempByIndex(0);
 }
 
 void menuTempAlarm(int index)
@@ -415,7 +438,7 @@ void menuTempAlarm(int index)
     }
     digitalWrite(LED_LIGHT, HIGH);
     printDisplayln("Set Alarm Out...", 0);
-    printDisplayTempCByIndex(index);
+    printDisplayTempByIndex(index);
     if (!isPlayTone)
     {
         playTone();
@@ -620,9 +643,16 @@ byte getButton()
     return -1;
 }
 
-float getTempCByIndex(byte index)
+float getTempByIndex(byte index)
 {
     tempSensor.requestTemperatures();
-    return tempSensor.getTempCByIndex(index);
+    if (!isUseF)
+    {
+        return tempSensor.getTempCByIndex(index);
+    }
+    else
+    {
+        return tempSensor.getTempFByIndex(index);
+    }
 }
 //misc
