@@ -92,7 +92,8 @@ const char* const mode_table[] PROGMEM = {mode_0, mode_1, mode_2, mode_3, mode_d
 
 const char word_0[] PROGMEM = "Temperature";
 const char word_1[] PROGMEM = "Alarming";
-const char* const word_table[] PROGMEM = {word_0, word_1};
+const char word_2[] PROGMEM = "Hold Cancel";
+const char* const word_table[] PROGMEM = {word_0, word_1, word_2};
 
 //for debug
 #define debugSerialPrint false
@@ -271,7 +272,10 @@ boolean controlCancel(int holdSecs)
         if (button == CON_BTN_SELECT)
         {
             lcd.clear();
-            printDisplayln("Hold Cancel", 0);
+            //print "Hold Cancel"
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[2])));
+            printDisplayBuffer(0);
+            //printDisplayln("Hold Cancel", 0);
         }
     }
 
@@ -313,32 +317,42 @@ void menuSetMode()
     switch (i)
     {
         case 0:
-            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'C';
             isUseF = false;
             mode = 0;
             break;
         case 1:
-            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'C';
             isUseF = false;
             mode = 1;
             break;
         case 2:
-            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'F';
             isUseF = true;
             mode = 2;
             break;
         case 3:
-            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'F';
             isUseF = true;
             mode = 3;
             break;
 
         default:
-            printDisplayln((char*)pgm_read_word(&(mode_table[MAX_MODE])), 1);
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            //printDisplayln((char*)pgm_read_word(&(mode_table[MAX_MODE])), 1);
             mode = MAX_MODE;
             break;
     }
@@ -366,7 +380,9 @@ void menuGetTemp()
         return;
     }
     //print "Temperature"
-    printDisplayln((char*)pgm_read_word(&(word_table[0])), 0);
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[0])));
+    printDisplayBuffer(0);
+    //printDisplayln((char*)pgm_read_word(&(word_table[0])), 0);
     printDisplayTempByIndex(0);
 }
 
@@ -412,7 +428,9 @@ void menuTempAlarm(int index)
     }
     digitalWrite(LED_LIGHT, HIGH);
     //print "Alarming"
-    printDisplayln((char*)pgm_read_word(&(word_table[1])), 0);
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[1])));
+    printDisplayBuffer(0);
+    //printDisplayln((char*)pgm_read_word(&(word_table[1])), 0);
     printDisplayTempByIndex(index);
     if (!isPlayTone)
     {
