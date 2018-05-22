@@ -48,7 +48,7 @@ const static char ch_Dot      = -91;
 const static char ch_Degree   = -33;
 const static char ch_Block    = -1;
 
-#define maxMode 2
+#define maxMode 4
 
 //for debug
 #define debugButton false
@@ -91,16 +91,16 @@ struct ButtonControl
 
 int mode   = 0;
 
-int setTemp     = 32;
+int setTemp     = 50;
 float nowTemp   = 0.0f;
 
 char greater = '>';
+char symB = 'C';
 
 boolean isTempSet   = false;
 boolean isModeSet   = false;
 boolean isAlarmSet  = false;
 boolean isPlayTone  = false;
-boolean requestClear = false;
 boolean isUseF      = false;
 int isCheckGreater = 1;
 
@@ -115,12 +115,6 @@ void loop()
     Serial.println(millis() - timeDebug);
     timeDebug = millis();
     #endif
-
-    if (requestClear)
-    {
-        requestClear = false;
-        //lcd.clear();
-    }
 
     if (!isModeSet)
     {
@@ -193,7 +187,7 @@ void printDisplayTempByIndex(int index)
 {
     nowTemp = getTempByIndex(index);
     dtostrf(nowTemp, -5, 1, varBuffer);
-    printDisplayTemp("Now:", varBuffer, 'C', 1);
+    printDisplayTemp("Now:", varBuffer, symB, 1);
 }
 
 void printDisplayln(char *str, byte row)
@@ -272,7 +266,6 @@ void controlValue(int *valueLR, int *valueUD, boolean *isSet, int modClick, int 
             if (button == CON_BTN_SELECT)
             {
                 modValue(isSet);
-                requestClear = true;
             }
         }
     }
@@ -355,12 +348,28 @@ void menuSetMode()
     switch (i)
     {
         case 0:
-            printDisplayln("Alarm Temp", 1);
+            printDisplayln("Alarm Temp C", 1);
+            symB = 'C';
+            isUseF = false;
             mode = 0;
             break;
         case 1:
-            printDisplayln("Read Only", 1);
+            printDisplayln("Read Only C", 1);
+            symB = 'C';
+            isUseF = false;
             mode = 1;
+            break;
+        case 2:
+            printDisplayln("Alarm Temp F", 1);
+            symB = 'F';
+            isUseF = true;
+            mode = 2;
+            break;
+        case 3:
+            printDisplayln("Read Only F", 1);
+            symB = 'F';
+            isUseF = true;
+            mode = 3;
             break;
 
         default:
@@ -372,7 +381,6 @@ void menuSetMode()
 
 void menuSetTemp()
 {
-    //printDisplayTemp("Set:", setTemp, 'C', 0);
     if (isCheckGreater % 2)
     {
         greater = '>';
@@ -381,7 +389,7 @@ void menuSetTemp()
     {
         greater = '<';
     }  
-    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, 'C');
+    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, symB);
     printDisplayBuffer(0);
     controlValue(&setTemp, &isCheckGreater, &isTempSet, 1, 5);
 }
@@ -425,7 +433,7 @@ void menuCheckGetTemp()
         }
     }
 
-    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, 'C');
+    sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, symB);
     printDisplayBuffer(0);
     printDisplayTempByIndex(0);
 }
