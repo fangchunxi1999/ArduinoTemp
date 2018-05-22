@@ -5,20 +5,26 @@
 //LCD Library
 #include <LiquidCrystal.h>
 
-//for LCD Screen
+#include <avr/pgmspace.h>
+
+/* Defining every pin for LCD Screen */
 #define LCD_RS      8
 #define LCD_ENABLE  9
 #define LCD_D4      4
 #define LCD_D5      5
 #define LCD_D6      6
 #define LCD_D7      7
-#define LCD_COLS    16
-#define LCD_ROWS    2
 LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
-//for Button value
+/* Defining size of LCD Screen */
+#define LCD_COLS    16
+#define LCD_ROWS    2
+
+
+/* Defining pin for button */
 #define CON_BUTTON      A0
 
+/* Set value for every button */
 #define CON_BTN_NONE    0
 #define CON_BTN_SELECT  1
 #define CON_BTN_UP      2
@@ -39,43 +45,16 @@ OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
 #define LED_LIGHT   50
-#define tonePin     48
+#define TONE_PIN     48
+
+#define MAX_MODE 4
 
 //add for later
-const static char ch_Left     = 127;
-const static char ch_Right    = 126;
-const static char ch_Dot      = -91;
+//const static char ch_Left     = 127;
+//const static char ch_Right    = 126;
+//const static char ch_Dot      = -91;
 const static char ch_Degree   = -33;
-const static char ch_Block    = -1;
-
-#define maxMode 4
-
-//for debug
-#define debugButton false
-#define debugSerialPrint false
-
-void setup()
-{
-    lcd.begin(LCD_COLS, LCD_ROWS);
-    printDisplayln("Welcome!!", 0);
-
-    pinMode(LED_LIGHT, OUTPUT);
-    digitalWrite(LED_LIGHT, HIGH);
-
-    tone(tonePin, 1000);
-
-    tempSensor.begin();
-    tempSensor.setResolution(12);
-
-    #if (debugSerialPrint)
-    Serial.begin(115200);
-    #endif
-
-    delay(1000);
-    noTone(tonePin);
-    digitalWrite(LED_LIGHT, LOW);
-    lcd.clear();
-}
+//const static char ch_Block    = -1;
 
 char displayBuffer[LCD_COLS + 1] = "";
 char varBuffer[6];
@@ -83,8 +62,8 @@ char varBuffer[6];
 struct ButtonControl
 {
     unsigned long firstTime = 0;
-    int secs_held;
-    int prev_secs_held;
+    short secs_held;
+    short prev_secs_held;
     boolean current;
     boolean previous = true;
 } buttonValue;
@@ -94,19 +73,51 @@ int mode   = 0;
 int setTemp     = 50;
 float nowTemp   = 0.0f;
 
-char greater = '>';
-char symB = 'C';
+char greater    = '>';
+char symB       = 'C';
 
 boolean isTempSet   = false;
 boolean isModeSet   = false;
 boolean isAlarmSet  = false;
 boolean isPlayTone  = false;
 boolean isUseF      = false;
-int isCheckGreater = 1;
+int isCheckGreater  = 1;
+
+const char mode_0[] PROGMEM = "Alarm Temp C";
+const char mode_1[] PROGMEM = "Read Only C";
+const char mode_2[] PROGMEM = "Alarm Temp F";
+const char mode_3[] PROGMEM = "Read Only F";
+const char mode_def[] PROGMEM = "Err";
+const char* const mode_table[] PROGMEM = {mode_0, mode_1, mode_2, mode_3, mode_def};
+
+const char word_0[] PROGMEM = "Temperature";
+const char word_1[] PROGMEM = "Alarming";
+const char* const word_table[] PROGMEM = {word_0, word_1};
+
+//for debug
+#define debugSerialPrint false
 
 #if (debugSerialPrint)
 unsigned long timeDebug = 0;
 #endif
+
+void setup()
+{
+    #if (debugSerialPrint)
+    Serial.begin(115200);
+    #endif
+
+    lcd.begin(LCD_COLS, LCD_ROWS);
+    printDisplayln("Welcome!!", 0);
+
+    pinMode(LED_LIGHT, OUTPUT);
+
+    tempSensor.begin();
+    tempSensor.setResolution(12);
+
+    delay(1000);
+    lcd.clear();
+}
 
 void loop()
 {
@@ -123,9 +134,10 @@ void loop()
     }
     else
     {
-        switch (mode % 2)
+        switch (mode % MAX_MODE)
         {
-            case 0: 
+            case 0:
+            case 2: 
                 if (!isTempSet)
                 {
                     menuSetTemp();
@@ -134,72 +146,25 @@ void loop()
                 menuCheckGetTemp();
                 return;
             
-            case 1: menuGetTemp();      return;
+            case 1: 
+            case 3: 
+                menuGetTemp();      return;
         }
     }
 }
-
-//debug function
-#if (debugButton)
-void printbuttonValue(byte key)
-{
-    switch (key)
-    {
-        case CON_BTN_NONE:
-        {
-            lcd.print("NONE  ");
-            break;
-        }
-        case CON_BTN_SELECT:
-        {
-            lcd.print("SELECT");
-            break;
-        }
-        case CON_BTN_UP:
-        {
-            lcd.print("UP    ");
-            break;
-        }
-        case CON_BTN_DOWN:
-        {
-            lcd.print("DOWN  ");
-            break;
-        }
-        case CON_BTN_LEFT:
-        {
-            lcd.print("LEFT  ");
-            break;
-        }
-        case CON_BTN_RIGHT:
-        {
-            lcd.print("RIGHT ");
-            break;
-        }
-    }
-}
-#endif
-
-//debug function
-
 
 //LCD Display function
 void printDisplayTempByIndex(int index)
 {
     nowTemp = getTempByIndex(index);
     dtostrf(nowTemp, -5, 1, varBuffer);
-    printDisplayTemp("Now:", varBuffer, symB, 1);
+    sprintf(displayBuffer, "Now:%s%c%c" , varBuffer, ch_Degree, symB);
+    printDisplayBuffer(1);
 }
 
 void printDisplayln(char *str, byte row)
 {
     sprintf(displayBuffer, "%s", str);
-    printDisplayBuffer(row);
-}
-
-
-void printDisplayTemp(char *str0, char *str1,char symbol, byte row)
-{
-    sprintf(displayBuffer, "%s%s%c%c" , str0, str1, ch_Degree, symbol);
     printDisplayBuffer(row);
 }
 
@@ -306,7 +271,7 @@ boolean controlCancel(int holdSecs)
         if (button == CON_BTN_SELECT)
         {
             lcd.clear();
-            printDisplayln("Hold 2 cancel", 0);
+            printDisplayln("Hold Cancel", 0);
         }
     }
 
@@ -316,13 +281,13 @@ boolean controlCancel(int holdSecs)
     {
         if (button == CON_BTN_SELECT)
         {
-            sprintf(displayBuffer, "%3d/%2d Secs", buttonValue.secs_held, holdSecs);
+            sprintf(displayBuffer, "%3d/%2d S", buttonValue.secs_held, holdSecs);
             printDisplayBuffer(1);
         }
         if (buttonValue.secs_held >= holdSecs)
         {
             lcd.clear();
-            noTone(tonePin);
+            noTone(TONE_PIN);
             digitalWrite(LED_LIGHT, LOW);
             isTempSet   = false;
             isModeSet   = false;
@@ -342,39 +307,39 @@ boolean controlCancel(int holdSecs)
 void menuSetMode()
 {
     controlValue(&mode, NULL, &isModeSet, 1, 1);
-    int i = mode % maxMode;
+    short i = mode % MAX_MODE;
     sprintf(displayBuffer, "Set:%2d", i + 1);
     printDisplayBuffer(0);
     switch (i)
     {
         case 0:
-            printDisplayln("Alarm Temp C", 1);
+            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'C';
             isUseF = false;
             mode = 0;
             break;
         case 1:
-            printDisplayln("Read Only C", 1);
+            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'C';
             isUseF = false;
             mode = 1;
             break;
         case 2:
-            printDisplayln("Alarm Temp F", 1);
+            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'F';
             isUseF = true;
             mode = 2;
             break;
         case 3:
-            printDisplayln("Read Only F", 1);
+            printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
             symB = 'F';
             isUseF = true;
             mode = 3;
             break;
 
         default:
-            printDisplayln("Err", 1);
-            mode = maxMode;
+            printDisplayln((char*)pgm_read_word(&(mode_table[MAX_MODE])), 1);
+            mode = MAX_MODE;
             break;
     }
 }
@@ -400,7 +365,8 @@ void menuGetTemp()
     {
         return;
     }
-    printDisplayln("Temperature", 0);
+    //print "Temperature"
+    printDisplayln((char*)pgm_read_word(&(word_table[0])), 0);
     printDisplayTempByIndex(0);
 }
 
@@ -445,7 +411,8 @@ void menuTempAlarm(int index)
         return;
     }
     digitalWrite(LED_LIGHT, HIGH);
-    printDisplayln("Set Alarm Out...", 0);
+    //print "Alarming"
+    printDisplayln((char*)pgm_read_word(&(word_table[1])), 0);
     printDisplayTempByIndex(index);
     if (!isPlayTone)
     {
@@ -606,18 +573,18 @@ void playTone()
     {
         if (controlCancel(3))
         {
-            noTone(tonePin);
+            noTone(TONE_PIN);
             return;
         }
         uint16_t data = pgm_read_word((uint16_t *)&MelodyData[x]);
         if((data & 0xF) == 0xF) 
         {
-            noTone(tonePin);
+            noTone(TONE_PIN);
         }
         else
         {
             uint16_t Freq = pgm_read_word(&Freq8[data&0xF]) / ( 1 << (8-(data>>4 & 0xF)) );
-            tone(tonePin, Freq);    
+            tone(TONE_PIN, Freq);    
         }
         if (x == MelodyLength - 1)
         {
