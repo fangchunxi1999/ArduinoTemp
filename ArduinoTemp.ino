@@ -77,6 +77,7 @@ char greater    = '>';
 char symB       = 'C';
 
 boolean isTempSet   = false;
+boolean isTempRead  = false;
 boolean isModeSet   = false;
 boolean isAlarmSet  = false;
 boolean isPlayTone  = false;
@@ -298,6 +299,7 @@ boolean controlCancel(int holdSecs)
             noTone(TONE_PIN);
             digitalWrite(LED_LIGHT, LOW);
             isTempSet   = false;
+            isTempRead  = false;
             isModeSet   = false;
             isAlarmSet  = false;
             isPlayTone  = false;
@@ -326,6 +328,7 @@ void menuSetMode()
             mode    = i;
             symB    = 'C';
             setTemp = 50;
+            nowTemp = 0;
             isUseF  = false;
             break;
         case 1:
@@ -342,6 +345,7 @@ void menuSetMode()
             mode    = i;
             symB    = 'F';
             setTemp = 122;
+            nowTemp = 0;
             isUseF  = true;
             break;
         case 3:
@@ -395,7 +399,7 @@ void menuTempCheck()
     
     if (isCheckGreater % 2)
     {
-        if (nowTemp >= setTemp || isAlarmSet)
+        if ((nowTemp >= setTemp || isAlarmSet) && isTempRead)
         {
             isAlarmSet = true;
             menuTempAlarm(0);
@@ -404,7 +408,7 @@ void menuTempCheck()
     }
     else
     {
-        if (nowTemp <= setTemp || isAlarmSet)
+        if ((nowTemp <= setTemp || isAlarmSet) && isTempRead)
         {
             isAlarmSet = true;
             menuTempAlarm(0);
@@ -645,6 +649,7 @@ byte getButton()
 float getTempByIndex(byte index)
 {
     tempSensor.requestTemperatures();
+    isTempRead = true;
     if (!isUseF)
         return tempSensor.getTempCByIndex(index);
     else
