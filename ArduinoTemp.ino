@@ -5,8 +5,6 @@
 //LCD Library
 #include <LiquidCrystal.h>
 
-#include <avr/pgmspace.h>
-
 /* Defining every pin for LCD Screen */
 #define LCD_RS      8
 #define LCD_ENABLE  9
@@ -44,10 +42,12 @@ LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 OneWire oneWire(TEMP_READ);
 DallasTemperature tempSensor(&oneWire);
 
-#define LED_LIGHT   50
-#define TONE_PIN     48
+#define LED_LIGHT   A8
+#define TONE_PIN    A9
 
-#define MAX_MODE 4
+#define MAX_MODE 5
+
+#define isSerialReport false
 
 //add for later
 //const static char ch_Left     = 127;
@@ -84,16 +84,18 @@ boolean isUseF      = false;
 int isCheckGreater  = 1;
 
 const char mode_0[] PROGMEM = "Alarm Temp C";
-const char mode_1[] PROGMEM = "Read Only C";
+const char mode_1[] PROGMEM = "Read Temp C";
 const char mode_2[] PROGMEM = "Alarm Temp F";
-const char mode_3[] PROGMEM = "Read Only F";
-const char mode_def[] PROGMEM = "Err";
-const char* const mode_table[] PROGMEM = {mode_0, mode_1, mode_2, mode_3, mode_def};
+const char mode_3[] PROGMEM = "Read Temp F";
+const char mode_4[] PROGMEM = "Sys Uptime";
+const char* const mode_table[] PROGMEM = {mode_0, mode_1, mode_2, mode_3, mode_4};
 
-const char word_0[] PROGMEM = "Temperature";
-const char word_1[] PROGMEM = "Alarming";
-const char word_2[] PROGMEM = "Hold Cancel";
-const char* const word_table[] PROGMEM = {word_0, word_1, word_2};
+const char word_0[] PROGMEM = "Welcome!!";
+const char word_1[] PROGMEM = "Temperature";
+const char word_2[] PROGMEM = "Alarming";
+const char word_3[] PROGMEM = "Hold Cancel";
+const char word_4[] PROGMEM = "Sys Uptime";
+const char* const word_table[] PROGMEM = {word_0, word_1, word_2, word_3, word_4};
 
 //for debug
 #define debugSerialPrint false
@@ -104,12 +106,13 @@ unsigned long timeDebug = 0;
 
 void setup()
 {
-    #if (debugSerialPrint)
+    #if (debugSerialPrint || isSerialReport)
     Serial.begin(115200);
     #endif
 
     lcd.begin(LCD_COLS, LCD_ROWS);
-    printDisplayln("Welcome!!", 0);
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[0])));
+    printDisplayBuffer(0);
 
     pinMode(LED_LIGHT, OUTPUT);
 
@@ -144,12 +147,15 @@ void loop()
                     menuSetTemp();
                     return;
                 }
-                menuCheckGetTemp();
+                menuTempCheck();
                 return;
             
             case 1: 
             case 3: 
-                menuGetTemp();      return;
+                menuTempGet();      return;
+
+            case 4:
+                menuUpTime();       return;
         }
     }
 }
@@ -163,18 +169,15 @@ void printDisplayTempByIndex(int index)
     printDisplayBuffer(1);
 }
 
-void printDisplayln(char *str, byte row)
-{
-    sprintf(displayBuffer, "%s", str);
-    printDisplayBuffer(row);
-}
-
 void printDisplayBuffer(byte row)
 {
     lcd.setCursor(0, row);
     char disBuff[LCD_COLS + 1] = "";
     sprintf(disBuff, "%-16s", displayBuffer);
-    #if (debugSerialPrint)
+    #if (debugSerialPrint || isSerialReport)
+    Serial.print("Ln ");
+    Serial.print(row);
+    Serial.print(" : ");
     Serial.println(disBuff);
     #endif
     lcd.print(disBuff);
@@ -273,9 +276,10 @@ boolean controlCancel(int holdSecs)
         {
             lcd.clear();
             //print "Hold Cancel"
-            strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[2])));
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[3])));
             printDisplayBuffer(0);
-            //printDisplayln("Hold Cancel", 0);
+            sprintf(displayBuffer, "%3d/%2d S", 0, holdSecs);
+            printDisplayBuffer(1);
         }
     }
 
@@ -307,7 +311,7 @@ boolean controlCancel(int holdSecs)
 //condition control
 
 
-//UI (WIP)
+//UI
 void menuSetMode()
 {
     controlValue(&mode, NULL, &isModeSet, 1, 1);
@@ -319,41 +323,43 @@ void menuSetMode()
         case 0:
             strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
             printDisplayBuffer(1);
-            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
-            symB = 'C';
-            isUseF = false;
-            mode = 0;
+            mode    = i;
+            symB    = 'C';
+            setTemp = 50;
+            isUseF  = false;
             break;
         case 1:
             strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
             printDisplayBuffer(1);
-            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
-            symB = 'C';
-            isUseF = false;
-            mode = 1;
+            mode    = i;
+            symB    = 'C';
+            isUseF  = false;
+
             break;
         case 2:
             strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
             printDisplayBuffer(1);
-            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
-            symB = 'F';
-            isUseF = true;
-            mode = 2;
+            mode    = i;
+            symB    = 'F';
+            setTemp = 122;
+            isUseF  = true;
             break;
         case 3:
             strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
             printDisplayBuffer(1);
-            //printDisplayln((char*)pgm_read_word(&(mode_table[i])), 1);
-            symB = 'F';
-            isUseF = true;
-            mode = 3;
+            mode    = i;
+            symB    = 'F';
+            isUseF  = true;
+            break;
+
+        case 4:
+            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
+            printDisplayBuffer(1);
+            mode    = i;
             break;
 
         default:
-            strcpy_P(displayBuffer, (char*)pgm_read_word(&(mode_table[i])));
-            printDisplayBuffer(1);
-            //printDisplayln((char*)pgm_read_word(&(mode_table[MAX_MODE])), 1);
-            mode = MAX_MODE;
+            mode = MAX_MODE - 1;
             break;
     }
 }
@@ -361,39 +367,30 @@ void menuSetMode()
 void menuSetTemp()
 {
     if (isCheckGreater % 2)
-    {
         greater = '>';
-    }
     else
-    {
         greater = '<';
-    }  
     sprintf(displayBuffer, "Set:%c%-4d%c%c", greater, setTemp, ch_Degree, symB);
     printDisplayBuffer(0);
     controlValue(&setTemp, &isCheckGreater, &isTempSet, 1, 5);
 }
 
-void menuGetTemp()
+void menuTempGet()
 {
     if (controlCancel(5))
-    {
         return;
-    }
     //print "Temperature"
-    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[0])));
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[1])));
     printDisplayBuffer(0);
-    //printDisplayln((char*)pgm_read_word(&(word_table[0])), 0);
     printDisplayTempByIndex(0);
 }
 
-void menuCheckGetTemp()
+void menuTempCheck()
 {
     if (!isAlarmSet)
     {
         if (controlCancel(5))
-        {
             return;
-        }
     }
     
     if (isCheckGreater % 2)
@@ -423,24 +420,31 @@ void menuCheckGetTemp()
 void menuTempAlarm(int index)
 {
     if (controlCancel(3))
-    {
         return;
-    }
     digitalWrite(LED_LIGHT, HIGH);
     //print "Alarming"
-    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[1])));
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[2])));
     printDisplayBuffer(0);
-    //printDisplayln((char*)pgm_read_word(&(word_table[1])), 0);
     printDisplayTempByIndex(index);
     if (!isPlayTone)
-    {
         playTone();
-    }
 }
+
+void menuUpTime()
+{
+    if (controlCancel(3))
+        return;
+    strcpy_P(displayBuffer, (char*)pgm_read_word(&(word_table[4])));
+    printDisplayBuffer(0);
+    unsigned long uptime = millis() / 1000;
+    sprintf(displayBuffer, "Now:%4lu S", uptime);
+    printDisplayBuffer(1);
+}
+
 //UI
 
 
-//Alarm play (WIP)
+//Alarm play
 // Octave 0 Note Codes
 #define       NOTE_C_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00000000)
 #define      NOTE_CS_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00000001)
@@ -451,7 +455,7 @@ void menuTempAlarm(int index)
 #define      NOTE_FS_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00000110)
 #define       NOTE_G_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00000111)
 #define      NOTE_GS_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00001000)
-#define       NOTE_A_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00001001)
+#define       NOTE_A_3(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00001001)
 #define      NOTE_AS_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00001010)
 #define       NOTE_B_0(DURATION) ( (((uint16_t)DURATION)<<8) | 0b00001011)
 
@@ -570,11 +574,11 @@ void menuTempAlarm(int index)
 #define    NOTE_SILENT(DURATION) ((((uint16_t)DURATION)<<8) | 0b00001111)
 
 static const uint16_t MelodyData[] PROGMEM = {
-    NOTE_A_0(255),  NOTE_SILENT(255),   NOTE_A_0(255),  NOTE_SILENT(255),
-    NOTE_A_0(255),  NOTE_SILENT(255),   NOTE_A_0(255),  NOTE_SILENT(255),
-    NOTE_A_0(255),  NOTE_SILENT(255),   NOTE_A_0(255),  NOTE_SILENT(255),
-    NOTE_A_0(255),  NOTE_SILENT(255),   NOTE_A_0(255),  NOTE_SILENT(255),
-    NOTE_A_0(255),  NOTE_SILENT(255),   NOTE_A_0(255),  NOTE_SILENT(255),
+    NOTE_A_3(255),  NOTE_SILENT(255),   NOTE_A_3(255),  NOTE_SILENT(255),
+    NOTE_A_3(255),  NOTE_SILENT(255),   NOTE_A_3(255),  NOTE_SILENT(255),
+    NOTE_A_3(255),  NOTE_SILENT(255),   NOTE_A_3(255),  NOTE_SILENT(255),
+    NOTE_A_3(255),  NOTE_SILENT(255),   NOTE_A_3(255),  NOTE_SILENT(255),
+    NOTE_A_3(255),  NOTE_SILENT(255),   NOTE_A_3(255),  NOTE_SILENT(255),
     
 };
 
@@ -610,11 +614,13 @@ void playTone()
         }   
     
     int16_t Duration = data>>8;
-    while(Duration--) delay(tempo);
+    while(Duration--) 
+        delay(tempo);
     }
+    
     isPlayTone = false;
 }
-//Alarm play (WIP)
+//Alarm play
 
 
 //misc
@@ -625,13 +631,13 @@ byte getButton()
     Serial.println(key);
     #endif
 
-    if (key > CON_VAR_NONE) return CON_BTN_NONE;
+    if (key > CON_VAR_NONE)     return CON_BTN_NONE;
 
-    if (key < CON_VAR_RIGHT)   return CON_BTN_RIGHT;
-    if (key < CON_VAR_UP)  return CON_BTN_UP;
-    if (key < CON_VAR_DOWN)  return CON_BTN_DOWN;
-    if (key < CON_VAR_LEFT)  return CON_BTN_LEFT; 
-    if (key < CON_VAR_SELECR)  return CON_BTN_SELECT;
+    if (key < CON_VAR_RIGHT)    return CON_BTN_RIGHT;
+    if (key < CON_VAR_UP)       return CON_BTN_UP;
+    if (key < CON_VAR_DOWN)     return CON_BTN_DOWN;
+    if (key < CON_VAR_LEFT)     return CON_BTN_LEFT; 
+    if (key < CON_VAR_SELECR)   return CON_BTN_SELECT;
 
     return -1;
 }
@@ -640,12 +646,8 @@ float getTempByIndex(byte index)
 {
     tempSensor.requestTemperatures();
     if (!isUseF)
-    {
         return tempSensor.getTempCByIndex(index);
-    }
     else
-    {
         return tempSensor.getTempFByIndex(index);
-    }
 }
 //misc
